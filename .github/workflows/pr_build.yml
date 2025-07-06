@@ -1,0 +1,10 @@
+name: Build and Test Stock Analysis Service Application
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    uses: ./.github/workflows/common.yml
