@@ -10,6 +10,8 @@ version = scmVersion.version
 
 ext {
     SPRING_BOOT_VERSION = '3.5.5'
+    LIQUIBASE_CORE_VERSION = '4.33.0'
+    POSTGRESQL_VERSION = '42.7.7'
 }
 
 springBoot {
