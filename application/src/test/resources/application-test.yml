@@ -1,0 +1,3 @@
+spring:
+  liquibase:
+    change-log: file:etc/database/changelog.yml

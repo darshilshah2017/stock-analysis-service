@@ -7,9 +7,13 @@ plugins {
 dependencies {
     implementation(project(":api"))
     implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation "org.liquibase:liquibase-core:${LIQUIBASE_CORE_VERSION}"
+    runtimeOnly "org.postgresql:postgresql:${POSTGRESQL_VERSION}"
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }
 
 test {

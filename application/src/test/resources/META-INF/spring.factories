@@ -1,0 +1,2 @@
+org.springframework.test.context.ContextCustomizerFactory=\
+com.github.screener.integration.testcontainers.postgres.PostgresTestContainerContextCustomizerFactory
