@@ -9,7 +9,7 @@ group = 'com.github.screener'
 version = scmVersion.version
 
 ext {
-    SPRING_BOOT_VERSION = '3.5.0'
+    SPRING_BOOT_VERSION = '3.5.5'
 }
 
 springBoot {
