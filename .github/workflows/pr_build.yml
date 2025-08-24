@@ -8,3 +8,67 @@ on:
 jobs:
   build-and-test:
     uses: ./.github/workflows/common.yml
+
+  review:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR Diff
+        id: diff
+        run: |
+          diff_content=$(git diff origin/${{ github.base_ref }} ${{ github.sha }})
+          echo "diff<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$diff_content" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Call Perplexity API for Review
+        id: review
+        env:
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          DIFF_CONTENT: ${{ steps.diff.outputs.diff }}
+        run: |
+          PROMPT="You are a Lead engineer. Review this code diff and comment on bugs, style, and improvements. Provide your feedback in Markdown format.\n\n\`\`\`diff\n$DIFF_CONTENT\n\`\`\`"
+          
+          JSON_PAYLOAD=$(jq -n \
+            --arg model "llama-3-sonar-large-32k-chat" \
+            --arg prompt "$PROMPT" \
+            '{model: $model, messages: [{role: "user", content: $prompt}]}')
+          
+          response=$(curl -s --fail -X POST https://api.perplexity.ai/chat/completions \
+            -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD")
+          
+          echo "API Response:"
+          echo "$response"
+          
+          review_comment=$(echo "$response" | jq -r '.choices[0].message.content')
+          
+          if [[ "$review_comment" == "null" ]]; then
+            echo "Failed to extract review comment from API response."
+            exit 1
+          fi
+          
+          echo "review_comment<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$review_comment" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Post Review Comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEW_COMMENT: ${{ steps.review.outputs.review_comment }}
+        run: |
+          JSON_PAYLOAD=$(jq -n --arg body "$REVIEW_COMMENT" '{body: $body}')
+          
+          curl -s -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "$JSON_PAYLOAD" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
