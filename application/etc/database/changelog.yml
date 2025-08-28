@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1
+      author: darshilshah2017
+      comment: "Create the 'partman' schema and pg_partman extension if they do not exist"
+      changes:
+        - tagDatabase:
+            tag: SAS-3A
+        - sqlFile:
+            path: SAS-3A.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+  - changeSet:
+      id: 2
+      author: darshilshah2017
+      comment: "Create partitioned table 'stock_analysis.daily_equity_data' and initialize pg_partman partitioning with 3-month range partitions"
+      changes:
+        - tagDatabase:
+            tag: SAS-3B
+        - sqlFile:
+            path: SAS-3B.sql
+            relativeToChangelogFile: true
+            splitStatements: true
