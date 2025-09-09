@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/stock_analysis?currentSchema=stock_analysis
+    username: stockanalysisservice
+    password: ywY3a2to
+  liquibase:
+    change-log: file:application/etc/database/changelog.yml
+    enabled: true
