@@ -6,3 +6,22 @@ spring:
   liquibase:
     change-log: file:application/etc/database/changelog.yml
     enabled: true
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 5000
+          fetch_size: 50
+        order_inserts: true
+  cache:
+    type: caffeine
+    cache-names: indexIdByIndexName
+    caffeine:
+      spec: expireAfterWrite=7d
+
+
+stock-analysis:
+  config:
+    daily-index:
+      folder-path: daily-report/index
