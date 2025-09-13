@@ -1,10 +1,12 @@
 package com.github.screener.entity;
 
 import jakarta.persistence.*;
+
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Objects;
 
 @Entity
 @Table(name = "daily_index_data", schema = "stock_analysis")
@@ -23,6 +25,9 @@ public class DailyIndexData {
 
     @Column(name = "did_close_value", nullable = false)
     private BigDecimal closeValue;
+
+    @Column(name = "did_change_percentage", nullable = false)
+    private Double changePercentage;
 
     @Column(name = "did_pe_ratio", nullable = false)
     private BigDecimal peRatio;
@@ -51,6 +56,10 @@ public class DailyIndexData {
 
     public BigDecimal getCloseValue() {
         return closeValue;
+    }
+
+    public Double getChangePercentage() {
+        return changePercentage;
     }
 
     public BigDecimal getPeRatio() {
@@ -97,6 +106,11 @@ public class DailyIndexData {
             return this;
         }
 
+        public Builder withChangePercentage(Double changePercentage) {
+            instance.changePercentage = changePercentage;
+            return this;
+        }
+
         public Builder withPeRatio(BigDecimal peRatio) {
             instance.peRatio = peRatio;
             return this;
@@ -114,8 +128,8 @@ public class DailyIndexData {
 
     @Embeddable
     public static class DailyIndexDataId implements Serializable {
-        @Column(name = "did_index", nullable = false)
-        private String index;
+        @Column(name = "did_index_id", nullable = false)
+        private Integer indexId;
 
         @Column(name = "did_date", nullable = false)
         private LocalDate date;
@@ -123,13 +137,13 @@ public class DailyIndexData {
         public DailyIndexDataId() {
         }
 
-        public DailyIndexDataId(String index, LocalDate date) {
-            this.index = index;
+        public DailyIndexDataId(Integer indexId, LocalDate date) {
+            this.indexId = indexId;
             this.date = date;
         }
 
-        public String getIndex() {
-            return index;
+        public Integer getIndexId() {
+            return indexId;
         }
 
         public LocalDate getDate() {
@@ -138,15 +152,18 @@ public class DailyIndexData {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            DailyIndexDataId that = (DailyIndexDataId) o;
-            return java.util.Objects.equals(index, that.index) && java.util.Objects.equals(date, that.date);
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof DailyIndexDataId that)) {
+                return false;
+            }
+            return Objects.equals(indexId, that.indexId) && Objects.equals(date, that.date);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(index, date);
+            return Objects.hash(indexId, date);
         }
     }
 
