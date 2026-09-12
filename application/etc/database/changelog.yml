@@ -32,3 +32,25 @@ databaseChangeLog:
             path: SAS-7.sql
             relativeToChangelogFile: true
             splitStatements: true
+  - changeSet:
+      id: 4
+      author: darshilshah2017
+      comment: "Add 'stock_analysis.index' table and evolve 'daily_index_data' to reference it by id (adds did_change_percentage, did_index_id FK)"
+      changes:
+        - tagDatabase:
+            tag: SAS-8A
+        - sqlFile:
+            path: SAS-8A.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+  - changeSet:
+      id: 5
+      author: darshilshah2017
+      comment: "Insert index data into index table"
+      changes:
+        - tagDatabase:
+            tag: SAS-8B
+        - sqlFile:
+            path: SAS-8B.sql
+            relativeToChangelogFile: true
+            splitStatements: true
