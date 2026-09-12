@@ -4,7 +4,7 @@ import com.github.screener.entity.DailyIndexData;
 import com.github.screener.integration.testcontainers.postgres.PostgresTestContainerContextCustomizerFactory.PostgresTestContainer;
 import com.github.screener.repository.DailyIndexDataRepository;
 import com.github.screener.repository.MarketIndexRepository;
-import com.github.screener.service.DailyIndexDataService;
+import com.github.screener.service.IndexService;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,20 +28,20 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * End-to-end test of {@link DailyIndexDataService}: reads real CSV files off disk, resolves index
+ * End-to-end test of {@link IndexService}: reads real CSV files off disk, resolves index
  * names against a real {@link MarketIndexRepository}, and persists rows into a real Postgres instance.
  */
 @SpringBootTest
 @PostgresTestContainer
 @ActiveProfiles("test")
-class DailyIndexDataITest {
+class IndexImportITest {
 
     private static final DateTimeFormatter CSV_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy");
     private static final String CSV_HEADER = "Index Name,Index Date,Open Index Value,High Index Value,"
             + "Low Index Value,Closing Index Value,Points Change,Change(%),Volume,Turnover (Rs. Cr.),P/E,P/B,Div Yield";
 
     @Autowired
-    private DailyIndexDataService dailyIndexDataService;
+    private IndexService indexService;
     @Autowired
     private DailyIndexDataRepository dailyIndexDataRepository;
     @Autowired
@@ -57,7 +57,7 @@ class DailyIndexDataITest {
     @BeforeEach
     void setUp() {
         dailyIndexDataRepository.deleteAll();
-        ReflectionTestUtils.setField(dailyIndexDataService, "folder", csvFolder);
+        ReflectionTestUtils.setField(indexService, "folder", csvFolder);
     }
 
     /**
@@ -65,7 +65,7 @@ class DailyIndexDataITest {
      * Wait for the executor to go idle rather than asserting immediately or sleeping a guess.
      */
     private void importAndAwaitCompletion() {
-        dailyIndexDataService.importDailyIndexData();
+        indexService.importDailyIndexData();
 
         Awaitility.await()
                 .atMost(Duration.ofSeconds(5))
@@ -98,13 +98,24 @@ class DailyIndexDataITest {
                 .filter(row -> row.getId().getDate().equals(today))
                 .findFirst()
                 .orElseThrow();
-        assertThat(todayRow.getOpenValue()).isEqualByComparingTo(new BigDecimal("25867.10"));
-        assertThat(todayRow.getHighValue()).isEqualByComparingTo(new BigDecimal("25923.65"));
-        assertThat(todayRow.getLowValue()).isEqualByComparingTo(new BigDecimal("25728.00"));
-        assertThat(todayRow.getCloseValue()).isEqualByComparingTo(new BigDecimal("25839.65"));
-        assertThat(todayRow.getChangePercentage()).isEqualTo(-0.47);
-        assertThat(todayRow.getPeRatio()).isEqualByComparingTo(new BigDecimal("22.50"));
-        assertThat(todayRow.getPbRatio()).isEqualByComparingTo(new BigDecimal("3.51"));
+        // did_*_value/did_pe_ratio/did_pb_ratio are NUMERIC(14,2), so Postgres always returns scale-2
+        // BigDecimals matching these literals' scale exactly - safe to compare via equals() here.
+        assertThat(todayRow).extracting(
+                        DailyIndexData::getOpenValue,
+                        DailyIndexData::getHighValue,
+                        DailyIndexData::getLowValue,
+                        DailyIndexData::getCloseValue,
+                        DailyIndexData::getChangePercentage,
+                        DailyIndexData::getPeRatio,
+                        DailyIndexData::getPbRatio)
+                .containsExactly(
+                        new BigDecimal("25867.10"),
+                        new BigDecimal("25923.65"),
+                        new BigDecimal("25728.00"),
+                        new BigDecimal("25839.65"),
+                        -0.47,
+                        new BigDecimal("22.50"),
+                        new BigDecimal("3.51"));
     }
 
     @Test

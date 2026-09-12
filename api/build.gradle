@@ -5,4 +5,5 @@ plugins {
 
 dependencies {
     implementation "org.springframework.boot:spring-boot-starter-web:$SPRING_BOOT_VERSION"
+    implementation "jakarta.validation:jakarta.validation-api:$JAKARTA_VALIDATION_API_VERSION"
 }
