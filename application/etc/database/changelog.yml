@@ -54,3 +54,14 @@ databaseChangeLog:
             path: SAS-8B.sql
             relativeToChangelogFile: true
             splitStatements: true
+  - changeSet:
+      id: 6
+      author: darshilshah2017
+      comment: "Backfill 6 months of historical partitions on daily_index_data so rolling-window queries have data to land in"
+      changes:
+        - tagDatabase:
+            tag: SAS-9A
+        - sqlFile:
+            path: SAS-9A.sql
+            relativeToChangelogFile: true
+            splitStatements: false

@@ -1,6 +1,8 @@
 package com.github.screener.service;
 
+import com.github.screener.dto.IndexPerformance;
 import com.github.screener.repository.DailyIndexDataRepository;
+import com.github.screener.repository.IndexPriceRangeProjection;
 import com.github.screener.repository.MarketIndexRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,13 +18,20 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class DailyIndexDataServiceTest {
+class IndexServiceTest {
+
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     @Mock
     private DailyIndexDataRepository dailyIndexDataRepository;
@@ -30,14 +39,37 @@ class DailyIndexDataServiceTest {
     @Mock
     private MarketIndexRepository marketIndexRepository;
 
-    private DailyIndexDataService service;
+    private IndexService service;
     private File testFolder;
 
     @BeforeEach
     void setUp(@TempDir File tempDir) {
         testFolder = tempDir;
-        service = new DailyIndexDataService("daily-report/index", dailyIndexDataRepository, marketIndexRepository);
+        service = new IndexService("daily-report/index", dailyIndexDataRepository, marketIndexRepository);
         ReflectionTestUtils.setField(service, "folder", testFolder);
+    }
+
+    private record TestProjection(Integer indexId, String indexName, BigDecimal startClose,
+                                  BigDecimal endClose) implements IndexPriceRangeProjection {
+        @Override
+        public Integer getIndexId() {
+            return indexId;
+        }
+
+        @Override
+        public String getIndexName() {
+            return indexName;
+        }
+
+        @Override
+        public BigDecimal getStartClose() {
+            return startClose;
+        }
+
+        @Override
+        public BigDecimal getEndClose() {
+            return endClose;
+        }
     }
 
     @Test
@@ -273,7 +305,94 @@ class DailyIndexDataServiceTest {
         verify(dailyIndexDataRepository, never()).saveAll(anyList());
     }
 
-    // Helper methods
+    @Test
+    void shouldReturnIndexesOutperformingNifty50SortedDescendingByReturn() {
+        LocalDate endDate = LocalDate.now(IST);
+        LocalDate startDate = endDate.minusMonths(3);
+
+        when(dailyIndexDataRepository.findCloseValuesAsOf(startDate, endDate)).thenReturn(List.of(
+                new TestProjection(1, "Nifty 50", new BigDecimal("100"), new BigDecimal("110")),   // +10%
+                new TestProjection(2, "Nifty Bank", new BigDecimal("100"), new BigDecimal("130")), // +30%
+                new TestProjection(3, "Nifty IT", new BigDecimal("100"), new BigDecimal("120")),   // +20%
+                new TestProjection(4, "Nifty Auto", new BigDecimal("100"), new BigDecimal("105"))  // +5% (underperforms)
+        ));
+
+        List<IndexPerformance> result = service.findOutperformingIndexes("Nifty 50", 3);
+
+        assertThat(result).extracting(IndexPerformance::indexName)
+                .containsExactly("Nifty Bank", "Nifty IT", "Nifty 50");
+        assertThat(result.get(0).returnPercentage()).isEqualTo(30.0);
+        assertThat(result.get(1).returnPercentage()).isEqualTo(20.0);
+        assertThat(result.get(2).returnPercentage()).isEqualTo(10.0);
+    }
+
+    @Test
+    void shouldIncludeBenchmarkInResults() {
+        LocalDate endDate = LocalDate.now(IST);
+        LocalDate startDate = endDate.minusMonths(1);
+
+        when(dailyIndexDataRepository.findCloseValuesAsOf(startDate, endDate)).thenReturn(List.of(
+                new TestProjection(1, "Nifty 50", new BigDecimal("100"), new BigDecimal("110"))
+        ));
+
+        List<IndexPerformance> result = service.findOutperformingIndexes("Nifty 50", 1);
+
+        assertThat(result).extracting(IndexPerformance::indexName).containsExactly("Nifty 50");
+        assertThat(result.getFirst().returnPercentage()).isEqualTo(10.0);
+    }
+
+    @Test
+    void shouldExcludeIndexesMissingStartOrEndPriceData() {
+        LocalDate endDate = LocalDate.now(IST);
+        LocalDate startDate = endDate.minusMonths(6);
+
+        // Nifty Bank has no data far enough back (e.g. index launched recently), so the underlying
+        // start/end join naturally excludes it - it never appears in what the repository returns.
+        // Nifty 50 (the benchmark) is still included, since it has data for the full period.
+        when(dailyIndexDataRepository.findCloseValuesAsOf(startDate, endDate)).thenReturn(List.of(
+                new TestProjection(1, "Nifty 50", new BigDecimal("100"), new BigDecimal("110"))
+        ));
+
+        List<IndexPerformance> result = service.findOutperformingIndexes("Nifty 50", 6);
+
+        assertThat(result).extracting(IndexPerformance::indexName).containsExactly("Nifty 50");
+    }
+
+    @Test
+    void shouldThrowWhenNifty50DataMissingForPeriod() {
+        LocalDate endDate = LocalDate.now(IST);
+        LocalDate startDate = endDate.minusMonths(2);
+
+        when(dailyIndexDataRepository.findCloseValuesAsOf(startDate, endDate)).thenReturn(List.of(
+                new TestProjection(2, "Nifty Bank", new BigDecimal("100"), new BigDecimal("130"))
+        ));
+
+        assertThatThrownBy(() -> service.findOutperformingIndexes("Nifty 50", 2))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void shouldMatchBenchmarkNameCaseInsensitively() {
+        LocalDate endDate = LocalDate.now(IST);
+        LocalDate startDate = endDate.minusMonths(3);
+
+        when(dailyIndexDataRepository.findCloseValuesAsOf(startDate, endDate)).thenReturn(List.of(
+                new TestProjection(1, "Nifty 50", new BigDecimal("100"), new BigDecimal("110")),   // +10%
+                new TestProjection(2, "Nifty Bank", new BigDecimal("100"), new BigDecimal("130"))  // +30%
+        ));
+
+        List<IndexPerformance> result = service.findOutperformingIndexes("nifty 50", 3);
+
+        assertThat(result).extracting(IndexPerformance::indexName).containsExactly("Nifty Bank", "Nifty 50");
+    }
+
+    @Test
+    void shouldThrowWhenFolderPathDoesNotExistOnClasspath() {
+        assertThatThrownBy(() -> new IndexService("no-such-folder/on-classpath",
+                dailyIndexDataRepository, marketIndexRepository))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     private void createCsvFile(String fileName, String content) throws IOException {
         File file = new File(testFolder, fileName);
         try (FileWriter writer = new FileWriter(file)) {

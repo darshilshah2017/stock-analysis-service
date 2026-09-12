@@ -1,6 +1,7 @@
 package com.github.screener.service;
 
 import com.github.screener.dto.DailyIndexDataRow;
+import com.github.screener.dto.IndexPerformance;
 import com.github.screener.entity.DailyIndexData;
 import com.github.screener.repository.DailyIndexDataRepository;
 import com.github.screener.repository.MarketIndexRepository;
@@ -13,17 +14,22 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
-public class DailyIndexDataService {
+public class IndexService {
 
-    private static final Logger logger = LoggerFactory.getLogger(DailyIndexDataService.class);
+    private static final Logger logger = LoggerFactory.getLogger(IndexService.class);
     private static final DateTimeFormatter INDEX_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     private static final String[] EXPECTED_HEADERS = {
             "Index Name",                   // 0
@@ -46,9 +52,9 @@ public class DailyIndexDataService {
     private final CsvHeaderValidator csvHeaderValidator;
     private final File folder;
 
-    public DailyIndexDataService(@Value("${stock-analysis.config.daily-index.folder-path}") String folderPath,
-                                 DailyIndexDataRepository dailyIndexDataRepository,
-                                 MarketIndexRepository marketIndexRepository) {
+    public IndexService(@Value("${stock-analysis.config.daily-index.folder-path}") String folderPath,
+                         DailyIndexDataRepository dailyIndexDataRepository,
+                         MarketIndexRepository marketIndexRepository) {
         this.dailyIndexDataRepository = dailyIndexDataRepository;
         this.marketIndexRepository = marketIndexRepository;
         this.csvHeaderValidator = new CsvHeaderValidator(EXPECTED_HEADERS);
@@ -76,6 +82,27 @@ public class DailyIndexDataService {
                 logger.error("Error importing file: {}", csvFile.getName(), e);
             }
         }
+    }
+
+    public List<IndexPerformance> findOutperformingIndexes(String benchmarkIndexName, int months) {
+        LocalDate endDate = LocalDate.now(IST);
+        LocalDate startDate = endDate.minusMonths(months);
+
+        List<IndexPerformance> returns = dailyIndexDataRepository.findCloseValuesAsOf(startDate, endDate).stream()
+                .map(p -> new IndexPerformance(p.getIndexName(),
+                        computeReturnPercentage(p.getStartClose(), p.getEndClose())))
+                .toList();
+
+        IndexPerformance benchmark = returns.stream()
+                .filter(r -> benchmarkIndexName.equalsIgnoreCase(r.indexName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "No data available for benchmark index '" + benchmarkIndexName + "' over the requested period"));
+
+        return returns.stream()
+                .filter(r -> r == benchmark || r.returnPercentage() >= benchmark.returnPercentage())
+                .sorted(Comparator.comparingDouble(IndexPerformance::returnPercentage).reversed())
+                .toList();
     }
 
     private void importFile(File csvFile) throws IOException {
@@ -181,6 +208,13 @@ public class DailyIndexDataService {
             logger.debug("Error parsing line in file {}: {}", fileName, e.getMessage());
             return null;
         }
+    }
+
+    private double computeReturnPercentage(BigDecimal startClose, BigDecimal endClose) {
+        return endClose.subtract(startClose)
+                .divide(startClose, 10, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .doubleValue();
     }
 
     protected File getFolder() {
